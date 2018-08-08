@@ -1865,6 +1865,19 @@ void smt2_convt::convert_expr(const exprt &expr)
     exprt lowered = lower_popcount(to_popcount_expr(expr), ns);
     convert_expr(lowered);
   }
+  else if(expr.id()==ID_function_application)
+  {
+    auto fae=to_function_application_expr(expr);
+    auto f=fae.function();
+    auto op=fae.arguments();
+    out << "(";
+    convert_expr(f);
+    for(std::size_t i=0; i<op.size(); i++) {
+      out << ' ';
+      convert_expr(op[i]);
+    }
+    out << ")";
+  }
   else
     UNEXPECTEDCASE(
       "smt2_convt::convert_expr: `"+expr.id_string()+"' is unsupported");
@@ -4162,6 +4175,22 @@ void smt2_convt::set_to(const exprt &expr, bool value)
   return;
 }
 
+bool smt2_convt::is_uninterpreted_function_application(const exprt &expr)
+{
+  if(expr.id()==ID_function_application)
+  {
+    auto fae=to_function_application_expr(expr);
+    auto f=fae.function();
+    if(f.id()==ID_symbol && f.type().id()==ID_code)
+    {
+      irep_idt identifier=to_symbol_expr(f).get_identifier();
+      std::string smt2_identifier=convert_identifier(identifier);
+      return (has_prefix(smt2_identifier, CPROVER_PREFIX "uninterpreted_"));
+    }
+  }
+  return false;
+}
+
 void smt2_convt::find_symbols(const exprt &expr)
 {
   // recursive call on type
@@ -4171,8 +4200,29 @@ void smt2_convt::find_symbols(const exprt &expr)
   forall_operands(it, expr)
     find_symbols(*it);
 
-  if(expr.id()==ID_symbol ||
-     expr.id()==ID_nondet_symbol)
+  if(is_uninterpreted_function_application(expr))
+  {
+    auto fae=to_function_application_expr(expr);
+    auto f=fae.function();
+    auto op=fae.arguments();
+    irep_idt identifier=to_symbol_expr(f).get_identifier();
+    std::string smt2_identifier=convert_identifier(identifier);
+    if(uf_identifiers.find(smt2_identifier)==uf_identifiers.end())
+    {
+      out << "(declare-fun ";
+      convert_expr(f);
+      out << " (";
+      for(std::size_t i=0; i<op.size(); i++) {
+        convert_type(op[i].type());
+      }
+      out << ")";
+      convert_type(expr.type());
+      out << ")" << "\n";
+      uf_identifiers.insert(smt2_identifier);
+    }
+  }
+  else if(expr.id()==ID_symbol ||
+          expr.id()==ID_nondet_symbol)
   {
     // we don't track function-typed symbols
     if(expr.type().id()==ID_code)

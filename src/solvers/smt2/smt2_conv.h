@@ -314,6 +314,9 @@ protected:
   // Boolean part
   std::size_t no_boolean_variables;
   std::vector<bool> boolean_assignment;
+
+  bool is_uninterpreted_function_application(const exprt &expr);
+  smt2_identifierst uf_identifiers;
 };
 
 #endif // CPROVER_SOLVERS_SMT2_SMT2_CONV_H
